@@ -1,0 +1,5 @@
+.env
+env
+**/__pycache__/
+data/steam_secret.json
+data/steamClient.pkl
