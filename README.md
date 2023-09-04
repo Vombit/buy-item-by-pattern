@@ -18,7 +18,7 @@
 * identity_secret = `данные из mafile`
 <br>
 
-* STEAM_API_KEY = `сгенерированный API key` ( https://steamcommunity.com/dev/apikey )
+* STEAM_API_KEY = `сгенерированный API key` (https://steamcommunity.com/dev/apikey)
 * STEAM_LOGIN = `логин аккаунта`
 * STEAM_PASSOWORD = `пароль аккаунта`
 <br>
