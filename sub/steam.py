@@ -7,6 +7,7 @@ from PIL import Image
 load_dotenv(find_dotenv())
 import requests, time, os, re, statistics, pickle, json
 steam_client = None
+lots_per_page = os.environ.get("LOTS_PER_PAGE")
 
     
 def get_item_data(name):
@@ -30,8 +31,14 @@ def get_item_data(name):
                 except Exception as e:
                     print(e)
                     continue
-        time.sleep(3)
+                
         item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
+        for _ in range(15):
+            if (len(item_page) != lots_per_page):
+                time.sleep(1)
+                item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
+            else:
+                break
         items(item_page)
         
         return array
@@ -71,8 +78,8 @@ def get_item_data(name):
         
         page = context.new_page()
         page.goto(url)
-        time.sleep(2)
-        page.evaluate(f'g_oSearchResults.m_cPageSize = 30;g_oSearchResults.GoToPage(0, true);')
+        time.sleep(3)
+        page.evaluate(f'g_oSearchResults.m_cPageSize = {lots_per_page};g_oSearchResults.GoToPage(0, true);')
         
         url = page.query_selector('.market_listing_largeimage > img').get_attribute('src')
         array = find_items(page)

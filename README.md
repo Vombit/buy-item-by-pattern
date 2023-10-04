@@ -18,17 +18,20 @@
 * steamid =  `ид аккаунта стим`
 * shared_secret = `данные из mafile`
 * identity_secret = `данные из mafile`
-<br>
+<br><br>
 
 * STEAM_API_KEY = `сгенерированный API key` (https://steamcommunity.com/dev/apikey)
 * STEAM_LOGIN = `логин аккаунта`
 * STEAM_PASSOWORD = `пароль аккаунта`
-<br>
+<br><br>
 
 * TELEGRAM_TOKEN = `токен бота телеграм`
 * TELEGRAM_CHAT_ID = `ид пользователя, которому будут приходить уведомления`
-<br>
+<br><br>
 
 * PROXY = `прокси:порт (можно оставить пустым)`
 * USERNAME_PROXY = `логин прокси если требуется (можно оставить пустым)`
 * PASSWORD_PROXY = `пароль прокси если требуется (можно оставить пустым)`
+<br><br>
+
+* LOTS_PER_PAGE = `колличество лотов на странице`
