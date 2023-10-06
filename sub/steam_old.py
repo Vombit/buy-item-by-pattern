@@ -9,52 +9,40 @@ import requests, time, os, re, statistics, pickle, json
 steam_client = None
 lots_per_page = os.environ.get("LOTS_PER_PAGE")
 
- 
-def find_items(page, name, image_url, avg_price, percent, float_low, float_max):
-    item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
     
-    for _ in range(15):
-        if (len(item_page) != lots_per_page):
-            time.sleep(1)
-            item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
-        else:
-            break
-        
-    for item in item_page:
-        try:
-            item.hover(force=True)
-            item.query_selector('.market_actionmenu_button').click()
-            pop = page.query_selector('#market_action_popup_itemactions')
-            item_url = pop.query_selector('.popup_menu_item').get_attribute('href')
-            
-            item_get = requests.get(f'https://skinstats.app/api?url={item_url}')
-            item_float = item_get.json()['paintwear']
-            
-            item_price = int(float(re.search(r"\d+(\.\d+)?", item.query_selector('.market_listing_price.market_listing_price_with_fee').inner_text().replace(',', '.')).group()) * 100)
-            item_price_without_fee = int(float(re.search(r"\d+(\.\d+)?", item.query_selector('.market_listing_price.market_listing_price_without_fee').inner_text().replace(',', '.')).group()) * 100)
-            item_id = re.sub(r"\D", "", item.get_attribute('id'))
-        
-            # try buy item
-            avg_prices = float(avg_price)*100
-            max_price = int(avg_prices * (1 + float(percent)))
-        
-            print('Проверка предмета на соответствие...')
-            if float(item['item_float']) >= float(float_low) and float(item['item_float']) <= float(float_max):
-                if int(item['item_price']) <= int(max_price):
-                    buy_item(name, item_id, item_price, item_price_without_fee, item_float, avg_prices, image_url)
-                else:
-                    print('Предмет не соответствует цене')
+def get_item_data(name):
+    def find_items(page):
+        array = []
+        def items(items):
+            for item in items:
+                try:
+                    item.hover(force=True)
+                    item.query_selector('.market_actionmenu_button').click()
+                    pop = page.query_selector('#market_action_popup_itemactions')
+                    item_url = pop.query_selector('.popup_menu_item').get_attribute('href')
+                    
+                    item_get = requests.get(f'https://skinstats.app/api?url={item_url}')
+                    item_float = item_get.json()['paintwear']
+                    
+                    item_price = int(float(re.search(r"\d+(\.\d+)?", item.query_selector('.market_listing_price.market_listing_price_with_fee').inner_text().replace(',', '.')).group()) * 100)
+                    item_price_without_fee = int(float(re.search(r"\d+(\.\d+)?", item.query_selector('.market_listing_price.market_listing_price_without_fee').inner_text().replace(',', '.')).group()) * 100)
+                    item_id = re.sub(r"\D", "", item.get_attribute('id'))
+                    array.append({'item_id': item_id, 'item_float': item_float, 'item_price': item_price, 'item_price_without_fee': item_price_without_fee})
+                except Exception as e:
+                    print(e)
+                    continue
+                
+        item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
+        for _ in range(15):
+            if (len(item_page) != lots_per_page):
+                time.sleep(1)
+                item_page = page.query_selector_all('.market_listing_row.market_recent_listing_row')
             else:
-                print('Предмет не соответствует float')
-            
-        except Exception as e:
-            print(e)
-            continue
+                break
+        items(item_page)
         
-    return True
+        return array
 
-
-def get_item_data(name, float_low, float_max, percent):
     def main(playwright: Playwright):
         url = f'https://steamcommunity.com/market/listings/730/{name}'
         proxy = {
@@ -67,6 +55,7 @@ def get_item_data(name, float_low, float_max, percent):
         else:
             browser = playwright.firefox.launch(headless=True, proxy=proxy)
 
+    
         context = browser.new_context()
         cookies = [{
             'name':'steamLoginSecure', 
@@ -76,6 +65,7 @@ def get_item_data(name, float_low, float_max, percent):
             'httpOnly':True, 
             'secure':True
              }]
+        
         context.add_cookies(cookies)
         
         # пропуск загрузки картинок
@@ -91,10 +81,9 @@ def get_item_data(name, float_low, float_max, percent):
         time.sleep(3)
         page.evaluate(f'g_oSearchResults.m_cPageSize = {lots_per_page};g_oSearchResults.GoToPage(0, true);')
         
-        # url image skin
         url = page.query_selector('.market_listing_largeimage > img').get_attribute('src')
+        array = find_items(page)
         
-        # find AVG price
         table = page.query_selector('.market_commodity_orders_table')
         rows = table.query_selector_all('tbody > tr')
         prices = []
@@ -107,14 +96,13 @@ def get_item_data(name, float_low, float_max, percent):
             prices.append(price)
         prices = [float(price) for price in prices]
         avg_price = statistics.mean(prices)
-
+        
         browser.close()
         
-        find_items(page, name, url, avg_price, percent, float_low, float_max)
-        
+        return url, array, avg_price
     with sync_playwright() as playwright:
         return main(playwright)
-
+ 
 def buy_item(name, id, price, price_without_fee, item_float, avg_price, image_url):
     bot_token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -128,45 +116,60 @@ def buy_item(name, id, price, price_without_fee, item_float, avg_price, image_ur
     img_io.seek(0)
     files= {"photo": img_io}
     
-    message = f'{name}\n\nFloat: {item_float}\nAVG price: {round(float(avg_price/100), 3)} руб.\nPrice: {float(price/100)} руб.\n\n'
+    message_true = f'{name}\n\nFloat: {item_float}\nAVG price: {round(float(avg_price/100), 3)} руб.\nPrice: {float(price/100)} руб.\n\n✅ Buy ✅'
+    message_false = f'{name}\n\nFloat: {item_float}\nAVG price: {round(float(avg_price/100), 3)} руб.\nPrice: {float(price/100)} руб.\n\n❌ Fail ❌'
     
     print('Попытка купить предмет')
     try:
         response = steam_client.market.buy_item(name, id, price, fee, GameOptions.CS, Currency.RUB)
     except:
-        print('Покупка не успешна!')
-        payload = {'chat_id': chat_id,'caption': message + '❌ Fail ❌'}
+        payload = {'chat_id': chat_id,'caption': message_false}
         requests.post(url, files=files, data=payload)
+        print('Покупка не успешна!')
         return False
     
     if response['wallet_info']['success'] == 1:
+        
         print('Покупка успешна!')
-        payload = {'chat_id': chat_id,'caption': message + '✅ Buy ✅'}
+        
+        payload = {'chat_id': chat_id,'caption': message_true}
         requests.post(url, files=files, data=payload)
         return True
     else:
         print('Покупка не успешна!')
-        payload = {'chat_id': chat_id,'caption': message + '❌ Fail ❌'}
+        
+        payload = {'chat_id': chat_id,'caption': message_false}
         requests.post(url, files=files, data=payload)
         return False
-
-
+        
 def main(name, float_low, float_max, percent):
     global steam_client
-    i = 5
-    
     with open('data/steamClient.pkl', 'rb') as f: 
         steam_client = pickle.load(f)
         
     print('Проверка страницы предмета')
-    for _ in range(i):
-        try:
-            get_item_data(name, float_low, float_max, percent)
-            print('Страница проверена')
-            break
-        except:
-            print(f'Произошла ошибка! \n Попытка через {i} секунд')
-            time.sleep(i)
+    try:
+        page = get_item_data(name)
+    except:
+        time.sleep(5)
+        page = get_item_data(name)
+        
+    print('Страница проверена')
+    
+    url_image = page[0]
+    items = page[1]
+    avg_prices = float(page[2])*100
+    max_price = int(avg_prices * (1 + float(percent)))
+    
+    print('Поиск подходящего предмета')
+    i = 0
+    for item in items:
+        if float(item['item_float']) >= float(float_low) and float(item['item_float']) <= float(float_max):
+            if int(item['item_price']) <= int(max_price):
+                buy_item(name, item['item_id'], item['item_price'], item['item_price_without_fee'], item['item_float'], avg_prices, url_image)
+                i += 1
+    if i < 1:
+        print('Нет подходящих предметов')
     else:
-        print(f'Не удалось проверить предмет!')
-        return False
+        print(f'Совершено попыток купить: {i}')
+    return False
